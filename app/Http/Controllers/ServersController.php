@@ -289,9 +289,16 @@ class ServersController extends Controller {
     }
 
     public function createEnvironmentVariableFile($dbHost = false) {
+        \Log::emergency("Top of createEnvironmentVariableFile");
         $awsService = new AwsService();
 
+        $awsService->setCurrentServerAttributes();
+
+        \Log::emergency("About to try to get type");
+
         $type = $awsService->getInstanceTagValue('type');
+
+        \Log::emergency("createEnvironmentVariableFile with type ".$type);
 
         $environmentVariables = ServerEnvironmentDef::where('type', '=', $type)->get()->toArray();
 
@@ -313,6 +320,8 @@ class ServersController extends Controller {
             }
         }
         $fileHandler->clearFileAndWriteNewText();
+
+        \Log::emergency("createEnvironmentVariableFile with type ".$type);
     }
 
     public function setConfigDBHost($dbHost) {
@@ -343,8 +352,14 @@ class ServersController extends Controller {
 
 
         $dbHost = $this->getCurrentDBHostFromAws();
+        \Log::emergency('Got DB Host '.$dbHost);
+
         $this->setConfigDBHost($dbHost);
+        \Log::emergency("set DB Host");
         $this->updateEnvDBRecord($dbHost);
+        \Log::emergency("successfully updated host");
+
+
 
         $this->createEnvironmentVariableFile($dbHost);
     }
@@ -439,26 +454,41 @@ class ServersController extends Controller {
     }
 
     public function backupDbWithImageDeleteOld() {
+        Log::info('Starting backupDbWithImageDeleteOld');
         $awsService = new AwsService();
         $instances = $awsService->getAllInstances();
         $imageId = $awsService->getReservationIdWithTag($instances,'finance_db');
+
+        Log::info('Found Image ID '.$imageId);
 
         try {
             $awsService->createImage($imageId);
         }
         catch (\Exception $e) {
+            Log::info('Creating DB Image Failed');
+            Log::info($e->getMessage());
             die($e->getMessage());
         }
+
+        Log::info('Successfully created DB image ');
 
         sleep(300);
 
         $ip_address = $awsService->getReservationIPWithTag($instances,'finance_db');
 
+        Log::info('Got IP Address '.$ip_address);
+
         shell_exec("cd /home/ec2-user/keys && ssh -i Currency.pem ec2-user@".$ip_address." 'sudo service mysqld start'");
+
+        Log::info('Executed command');
 
         sleep(60);
 
+        Log::info('About to request small fleet of servers for 23 hours');
+
         $this->requestSmallMiniFleetFor23Hours();
+
+        Log::info('Creating createContinuousToRunRecords');
 
         $processController = new ProcessController();
         $processController->createContinuousToRunRecords();
@@ -475,11 +505,11 @@ class ServersController extends Controller {
         $validUntil = time() + $utility->hoursInSeconds(23);
 
         $params = [
-            'server_count' => 10,
+            'server_count' => 15,
             'interruption_behavior'=>'terminate',
             'image_id' => 'ami-0bf51fd46fb140e1d',
             'template_id'=> 'lt-084f84871df31725a',
-            'template_version'=> '5',
+            'template_version'=> '6',
             'tags'=> [
                 'Key' => 'server_type',
                 'Value' => 'utility',

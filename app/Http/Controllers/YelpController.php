@@ -20,14 +20,14 @@ class YelpController extends Controller
     public $logger;
     protected $apiResponse;
 
+    protected $yelp;
+
     public function search() {
-        $yelp = new Yelp();
-        $this->apiResponse = $yelp->search('employmentagencies', 'San Francisco, California');
+        $this->apiResponse = $this->yelp->search('employmentagencies', 'San Francisco, California');
     }
 
     public function getBusiness() {
-        $yelp = new Yelp();
-        $yelp->getBusiness('cHoNUKltOAJWSmNfsZ1h-w');
+        $this->yelp->getBusiness('cHoNUKltOAJWSmNfsZ1h-w');
     }
 
     public function loadCategories() {
@@ -101,13 +101,15 @@ class YelpController extends Controller
         }
     }
 
-    public function processOneSearch() {
+    public function processOneSearch($yelpApiId) {
         $this->logger = new ProcessLogger('yelp_one_search');
 
-        $yelp = new Yelp();
+        $yelp = new Yelp($yelpApiId);
         $yelp->logger = $this->logger;
 
-        $allOutstanding = YelpCityTracker::where('completed','=', 0)->get(['id'])->toArray();
+        $priority = YelpCityTracker::where('completed','=', 0)->max('priority');
+
+        $allOutstanding = YelpCityTracker::where('completed','=', 0)->where('priority', '=', $priority)->get(['id'])->toArray();
 
         $allIds = array_column($allOutstanding, 'id');
 
@@ -255,6 +257,7 @@ class YelpController extends Controller
         }
 
         try {
+            $this->logger->logMessage('Searching for Email for root '.$website);
             $rootEmails = $scraper->getEmailAddressesInLink($website);
             sleep(rand(2, 15));
 
@@ -274,6 +277,7 @@ class YelpController extends Controller
             }
 
             try{
+                $this->logger->logMessage('Searching for Email for  '.$fullUrl);
                 $emails = $scraper->getEmailAddressesInLink($fullUrl);
 
                 $this->saveEmails($yelpLocation, $emails, $fullUrl);

@@ -1,6 +1,7 @@
 <?php namespace App\Services;
 
 use \Aws;
+use \Log;
 
 class AwsService  {
 
@@ -16,11 +17,18 @@ class AwsService  {
     }
 
     public function setCurrentServerAttributes() {
-        $instance_id = file_get_contents("http://instance-data/latest/meta-data/instance-id");
+        try {
+            $instance_id = file_get_contents("http://169.254.169.254/latest/meta-data/instance-id");
+        }
+        catch (\Exception $e) {
+            Log::emergency($e->getMessage());
+        }
 
         $response = $this->ec2Client->describeInstances(['InstanceIds'=>[$instance_id]]);
 
         $this->currentInstance = $response['Reservations'][0]['Instances'][0];
+
+        Log::emergency('Current Instance '.$this->currentInstance);
 
     }
 
@@ -29,16 +37,17 @@ class AwsService  {
 
         return $response['Reservations'];
 
-
     }
 
     public function getInstanceTagValue($tagKey) {
+        Log::emergency($this->currentInstance['Tags']);
         foreach ($this->currentInstance['Tags'] as $tag) {
             if ($tag['Key'] == $tagKey) {
                 return $tag['Value'];
                 break;
             }
         }
+        return false;
     }
 
     public function getReservationIPWithTag($reservations, $tag) {
